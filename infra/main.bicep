@@ -14,33 +14,25 @@ param environmentName string
 })
 param location string
 
-@description('The name of the resource group for the OpenAI resource')
-param openAiResourceGroupName string = ''
-
 param containerRegistryName string = ''
-param aiHubName string = ''
-@description('The Azure AI Studio project name. If ommited will be generated')
+param aiFoundryName string = ''
+@description('The Azure AI Foundry project name. If omitted will be generated')
 param aiProjectName string = ''
-@description('The application insights resource name. If ommited will be generated')
+@description('The application insights resource name. If omitted will be generated')
 param applicationInsightsName string = ''
-@description('The Open AI resource name. If ommited will be generated')
-param openAiName string = ''
-param keyVaultName string = ''
-@description('The Azure Storage Account resource name. If ommited will be generated')
-param storageAccountName string = ''
+@description('The log analytics workspace name. If omitted will be generated')
+param logAnalyticsWorkspaceName string = ''
 
-@description('The Azure Search connection name. If ommited will use a default value')
+@description('The Azure Search connection name. If omitted will use a default value')
 param searchConnectionName string = ''
 var abbrs = loadJsonContent('./abbreviations.json')
-@description('The log analytics workspace name. If ommited will be generated')
-param logAnalyticsWorkspaceName string = ''
 param useApplicationInsights bool = true
 param useContainerRegistry bool = true
 param useSearch bool = true
 var aiConfig = loadYamlContent('./ai.yaml')
 
 @description('The API version of the OpenAI resource')
-param openAiApiVersion string = ' 2025-03-01-preview'
+param openAiApiVersion string = '2025-03-01-preview'
 
 @description('The type of the OpenAI resource')
 param openAiType string = 'azure'
@@ -73,14 +65,11 @@ resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-11-01' = {
   tags: tags
 }
 
-resource openAiResourceGroup 'Microsoft.Resources/resourceGroups@2024-11-01' existing = {
-  name: !empty(openAiResourceGroupName) ? openAiResourceGroupName : resourceGroup.name
-}
-
 var prefix = toLower('${environmentName}-${resourceToken}')
 
 // USER ROLES
 var principalType = empty(runningOnGh) ? 'User' : 'ServicePrincipal'
+
 module managedIdentity 'core/security/managed-identity.bicep' = {
   name: 'managed-identity'
   scope: resourceGroup
@@ -91,37 +80,67 @@ module managedIdentity 'core/security/managed-identity.bicep' = {
   }
 }
 
-module ai 'core/host/ai-environment.bicep' = {
-  name: 'ai'
+// Monitoring
+module logAnalytics 'core/monitor/loganalytics.bicep' = if (useApplicationInsights) {
+  name: 'loganalytics'
   scope: resourceGroup
   params: {
+    name: !empty(logAnalyticsWorkspaceName) ? logAnalyticsWorkspaceName : '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
     location: location
     tags: tags
-    hubName: !empty(aiHubName) ? aiHubName : 'ai-hub-${resourceToken}'
-    projectName: !empty(aiProjectName) ? aiProjectName : 'ai-project-${resourceToken}'
-    keyVaultName: !empty(keyVaultName) ? keyVaultName : '${abbrs.keyVaultVaults}${resourceToken}'
-    storageAccountName: !empty(storageAccountName)
-      ? storageAccountName
-      : '${abbrs.storageStorageAccounts}${resourceToken}'
-    openAiName: !empty(openAiName) ? openAiName : 'aoai-${resourceToken}'
-    openAiModelDeployments: array(aiConfig.?deployments ?? [])
-    logAnalyticsName: !useApplicationInsights
-      ? ''
-      : !empty(logAnalyticsWorkspaceName)
-          ? logAnalyticsWorkspaceName
-          : '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
-    applicationInsightsName: !useApplicationInsights
-      ? ''
-      : !empty(applicationInsightsName) ? applicationInsightsName : '${abbrs.insightsComponents}${resourceToken}'
-    containerRegistryName: !useContainerRegistry
-      ? ''
-      : !empty(containerRegistryName) ? containerRegistryName : '${abbrs.containerRegistryRegistries}${resourceToken}'
-    searchServiceName: !useSearch ? '' : !empty(searchServiceName) ? searchServiceName : '${abbrs.searchSearchServices}${resourceToken}'
-    searchConnectionName: !useSearch ? '' : !empty(searchConnectionName) ? searchConnectionName : 'search-service-connection'
   }
 }
 
-// Container apps host (including container registry)
+module applicationInsights 'core/monitor/applicationinsights.bicep' = if (useApplicationInsights) {
+  name: 'applicationinsights'
+  scope: resourceGroup
+  params: {
+    name: !empty(applicationInsightsName) ? applicationInsightsName : '${abbrs.insightsComponents}${resourceToken}'
+    location: location
+    tags: tags
+    logAnalyticsWorkspaceId: useApplicationInsights ? logAnalytics.outputs.id : ''
+  }
+}
+
+// Azure AI Search
+module searchService 'core/search/search-services.bicep' = if (useSearch) {
+  name: 'search'
+  scope: resourceGroup
+  params: {
+    name: !empty(searchServiceName) ? searchServiceName : '${abbrs.searchSearchServices}${resourceToken}'
+    location: location
+    semanticSearch: 'standard'
+  }
+}
+
+// AI Foundry (replaces hub + project + cognitiveservices)
+module aiFoundry 'core/ai/ai-foundry.bicep' = {
+  name: 'ai-foundry'
+  scope: resourceGroup
+  params: {
+    name: !empty(aiFoundryName) ? aiFoundryName : 'aif-${resourceToken}'
+    projectName: !empty(aiProjectName) ? aiProjectName : 'aif-proj-${resourceToken}'
+    location: location
+    tags: tags
+    deployments: array(aiConfig.?deployments ?? [])
+    searchServiceName: useSearch ? searchService.outputs.name : ''
+    searchConnectionName: !empty(searchConnectionName) ? searchConnectionName : 'search-service-connection'
+    principalId: managedIdentity.outputs.managedIdentityPrincipalId
+  }
+}
+
+// Container Registry
+module containerRegistry 'core/host/container-registry.bicep' = if (useContainerRegistry) {
+  name: 'container-registry'
+  scope: resourceGroup
+  params: {
+    name: !empty(containerRegistryName) ? containerRegistryName : '${abbrs.containerRegistryRegistries}${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
+// Container apps host
 module containerApps 'core/host/container-apps.bicep' = {
   name: 'container-apps'
   scope: resourceGroup
@@ -130,8 +149,8 @@ module containerApps 'core/host/container-apps.bicep' = {
     location: location
     tags: tags
     containerAppsEnvironmentName: '${prefix}-containerapps-env'
-    containerRegistryName: ai.outputs.containerRegistryName
-    logAnalyticsWorkspaceName: ai.outputs.logAnalyticsWorkspaceName
+    containerRegistryName: useContainerRegistry ? containerRegistry.outputs.name : ''
+    logAnalyticsWorkspaceName: useApplicationInsights ? logAnalytics.outputs.name : ''
   }
 }
 
@@ -148,13 +167,13 @@ module api 'app/api.bicep' = {
     containerRegistryName: containerApps.outputs.registryName
     openAiDeploymentName: openAiDeploymentName
     openAiEmbeddingDeploymentName: openAiEmbeddingDeploymentName
-    openAiEndpoint: ai.outputs.openAiEndpoint
+    openAiEndpoint: aiFoundry.outputs.endpoint
     openAiType: openAiType
     openAiApiVersion: openAiApiVersion
-    aiSearchEndpoint: ai.outputs.searchServiceEndpoint
+    aiSearchEndpoint: useSearch ? 'https://${searchService.outputs.name}.search.windows.net' : ''
     aiSearchIndexName: aiSearchIndexName
-    appinsights_Connectionstring: ai.outputs.applicationInsightsConnectionString
-    aifoundryProjName: ai.outputs.projectName
+    appinsights_Connectionstring: useApplicationInsights ? applicationInsights.outputs.connectionString : ''
+    aifoundryProjName: aiFoundry.outputs.projectName
   }
 }
 
@@ -169,13 +188,14 @@ module web 'app/web.bicep' = {
     identityId: managedIdentity.outputs.managedIdentityClientId
     containerAppsEnvironmentName: containerApps.outputs.environmentName
     containerRegistryName: containerApps.outputs.registryName
-    appinsights_Connectionstring: ai.outputs.applicationInsightsConnectionString
-    aifoundryProjName: ai.outputs.projectName
+    appinsights_Connectionstring: useApplicationInsights ? applicationInsights.outputs.connectionString : ''
+    aifoundryProjName: aiFoundry.outputs.projectName
     apiUrl: api.outputs.SERVICE_API_URI
   }
 }
 
-module aiSearchRole 'core/security/role.bicep' = {
+// RBAC Role Assignments
+module aiSearchRole 'core/security/role.bicep' = if (useSearch) {
   scope: resourceGroup
   name: 'ai-search-index-data-contributor'
   params: {
@@ -185,7 +205,7 @@ module aiSearchRole 'core/security/role.bicep' = {
   }
 }
 
-module appinsightsAccountRole 'core/security/role.bicep' = {
+module appinsightsAccountRole 'core/security/role.bicep' = if (useApplicationInsights) {
   scope: resourceGroup
   name: 'appinsights-account-role'
   params: {
@@ -195,7 +215,7 @@ module appinsightsAccountRole 'core/security/role.bicep' = {
   }
 }
 
-module userAiSearchRole 'core/security/role.bicep' = if (!empty(principalId)) {
+module userAiSearchRole 'core/security/role.bicep' = if (!empty(principalId) && useSearch) {
   scope: resourceGroup
   name: 'user-ai-search-index-data-contributor'
   params: {
@@ -225,6 +245,7 @@ module aiDeveloperRoleUser 'core/security/role.bicep' = {
   }
 }
 
+// Outputs
 output AZURE_SUBSCRIPTION_ID string = subscription().subscriptionId
 output AZURE_LOCATION string = location
 output AZURE_RESOURCE_GROUP string = resourceGroup.name
@@ -233,11 +254,9 @@ output MANAGED_IDENTITY_CLIENT_ID string = managedIdentity.outputs.managedIdenti
 
 output AZURE_OPENAI_CHAT_DEPLOYMENT string = openAiDeploymentName
 output AZURE_OPENAI_API_VERSION string = openAiApiVersion
-output AZURE_OPENAI_ENDPOINT string = ai.outputs.openAiEndpoint
-output AZURE_OPENAI_NAME string = ai.outputs.openAiName
-output AZURE_AI_FOUNDRY_PROJECT_NAME string = ai.outputs.projectName
-output AZURE_OPENAI_RESOURCE_GROUP string = openAiResourceGroup.name
-output AZURE_OPENAI_RESOURCE_GROUP_LOCATION string = openAiResourceGroup.location
+output AZURE_OPENAI_ENDPOINT string = aiFoundry.outputs.endpoint
+output AZURE_OPENAI_NAME string = aiFoundry.outputs.name
+output AZURE_AI_FOUNDRY_PROJECT_NAME string = aiFoundry.outputs.projectName
 
 output SERVICE_API_NAME string = api.outputs.SERVICE_API_NAME
 output SERVICE_API_URI string = api.outputs.SERVICE_API_URI
@@ -251,12 +270,12 @@ output AZURE_CONTAINER_ENVIRONMENT_NAME string = containerApps.outputs.environme
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerApps.outputs.registryLoginServer
 output AZURE_CONTAINER_REGISTRY_NAME string = containerApps.outputs.registryName
 
-output APPINSIGHTS_CONNECTIONSTRING string = ai.outputs.applicationInsightsConnectionString
+output APPINSIGHTS_CONNECTIONSTRING string = useApplicationInsights ? applicationInsights.outputs.connectionString : ''
 
 output OPENAI_TYPE string = 'azure'
 output AZURE_EMBEDDING_NAME string = openAiEmbeddingDeploymentName
 
-output AZURE_SEARCH_ENDPOINT string = ai.outputs.searchServiceEndpoint
-output AZURE_SEARCH_NAME string = ai.outputs.searchServiceName
+output AZURE_SEARCH_ENDPOINT string = useSearch ? 'https://${searchService.outputs.name}.search.windows.net' : ''
+output AZURE_SEARCH_NAME string = useSearch ? searchService.outputs.name : ''
 
 output AZURE_SEARCH_INDEX string = aiSearchIndexName

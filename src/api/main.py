@@ -3,18 +3,10 @@ import sys
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
+from typing import Optional
 from chat_request import generate_response_agent
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
-from utils.env_util import get_aifound_proj_conn_string
 
 load_dotenv()
-connection_string =  get_aifound_proj_conn_string()    
-project_client = AIProjectClient.from_connection_string(
-    credential=DefaultAzureCredential(),
-    conn_str=connection_string,
-)
 
 app = FastAPI()
 
@@ -24,18 +16,17 @@ async def root():
 
 class Item(BaseModel):
     question: str
-    thread_id: str
+    thread_id: Optional[str] = None
 
 @app.post("/api/generate_response")
 def generate_response(item: Item) -> dict:
     result = generate_response_agent(item.question, item.thread_id)
-    return result    
+    return result
 
-@app.post("/api/test")
-def test(question: str) -> dict:
-    thread = project_client.agents.create_thread()
-    result = generate_response_agent(question, thread.id)
-    return result   
+@app.get("/api/test")
+def test(question: str = "What products do you have?") -> dict:
+    result = generate_response_agent(question, None)
+    return result
 
 if __name__ == "__main__":
     import uvicorn

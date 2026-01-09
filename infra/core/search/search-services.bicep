@@ -7,7 +7,7 @@ param sku object = {
   name: 'standard'
 }
 
-param disabledDataExfiltrationOptions array = []
+param dataExfiltrationProtections array = []
 param encryptionWithCmk object = {
   enforcement: 'Unspecified'
 }
@@ -38,7 +38,7 @@ var searchIdentityProvider = (sku.name == 'free') ? null : {
   type: 'SystemAssigned'
 }
 
-resource search 'Microsoft.Search/searchServices@2024-06-01-Preview' = {
+resource search 'Microsoft.Search/searchServices@2025-05-01' = {
   name: name
   location: location
   tags: tags
@@ -50,7 +50,7 @@ resource search 'Microsoft.Search/searchServices@2024-06-01-Preview' = {
   //   }
   // }
   properties: {
-    disabledDataExfiltrationOptions: disabledDataExfiltrationOptions
+    dataExfiltrationProtections: dataExfiltrationProtections
     encryptionWithCmk: encryptionWithCmk
     hostingMode: hostingMode
     networkRuleSet: networkRuleSet

@@ -1,7 +1,7 @@
 requests~=2.32.3
 aiohttp~=3.11.16
 python-dotenv~=1.1.0
-azure-identity==1.21.0
-azure-ai-projects~=1.0.0b8
-chainlit~=2.4.1
-openai~=1.72.0
+azure-identity==1.22.0
+azure-ai-projects==2.0.0b3
+chainlit~=2.5.0
+openai>=2.8.0
