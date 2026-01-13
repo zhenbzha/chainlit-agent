@@ -14,7 +14,6 @@ param openAiEmbeddingDeploymentName string
 param openAiType string
 param aiSearchEndpoint string
 param aiSearchIndexName string
-param appinsights_Connectionstring string
 param aifoundryProjName string
 
 
@@ -56,10 +55,6 @@ module app '../core/host/container-app-upsert.bicep' = {
       {
         name: 'AZURE_EMBEDDING_NAME'
         value: openAiEmbeddingDeploymentName
-      }
-      {
-        name: 'APPINSIGHTS_CONNECTIONSTRING'
-        value: appinsights_Connectionstring
       }
       {
         name: 'AZURE_LOCATION'

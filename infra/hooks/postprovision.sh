@@ -5,12 +5,17 @@ azd env get-values > .env
 
 echo "--- ✅ | 1. Post-provisioning - env configured ---"
 
-# Setup to run notebooks
+# Setup virtual environment
+echo 'Setting up virtual environment...'
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
 echo 'Installing dependencies from "requirements.txt"'
-python -m pip install -r ./src/api/requirements.txt > /dev/null
-python -m pip install ipython ipykernel > /dev/null      # Install ipython and ipykernel
-ipython kernel install --name=python3 --user > /dev/null # Configure the IPython kernel
-jupyter kernelspec list > /dev/null                      # Verify kernelspec list isn't empty
+pip install -r ./src/api/requirements.txt > /dev/null
+pip install ipython ipykernel jupyter nbconvert > /dev/null
+ipython kernel install --name=python3 --user > /dev/null
+jupyter kernelspec list > /dev/null
 echo "--- ✅ | 2. Post-provisioning - ready execute notebooks ---"
 
 echo "Populating data ...."

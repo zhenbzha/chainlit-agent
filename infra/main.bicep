@@ -18,15 +18,10 @@ param containerRegistryName string = ''
 param aiFoundryName string = ''
 @description('The Azure AI Foundry project name. If omitted will be generated')
 param aiProjectName string = ''
-@description('The application insights resource name. If omitted will be generated')
-param applicationInsightsName string = ''
-@description('The log analytics workspace name. If omitted will be generated')
-param logAnalyticsWorkspaceName string = ''
 
 @description('The Azure Search connection name. If omitted will use a default value')
 param searchConnectionName string = ''
 var abbrs = loadJsonContent('./abbreviations.json')
-param useApplicationInsights bool = true
 param useContainerRegistry bool = true
 param useSearch bool = true
 var aiConfig = loadYamlContent('./ai.yaml')
@@ -80,28 +75,6 @@ module managedIdentity 'core/security/managed-identity.bicep' = {
   }
 }
 
-// Monitoring
-module logAnalytics 'core/monitor/loganalytics.bicep' = if (useApplicationInsights) {
-  name: 'loganalytics'
-  scope: resourceGroup
-  params: {
-    name: !empty(logAnalyticsWorkspaceName) ? logAnalyticsWorkspaceName : '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
-    location: location
-    tags: tags
-  }
-}
-
-module applicationInsights 'core/monitor/applicationinsights.bicep' = if (useApplicationInsights) {
-  name: 'applicationinsights'
-  scope: resourceGroup
-  params: {
-    name: !empty(applicationInsightsName) ? applicationInsightsName : '${abbrs.insightsComponents}${resourceToken}'
-    location: location
-    tags: tags
-    logAnalyticsWorkspaceId: useApplicationInsights ? logAnalytics.outputs.id : ''
-  }
-}
-
 // Azure AI Search
 module searchService 'core/search/search-services.bicep' = if (useSearch) {
   name: 'search'
@@ -150,7 +123,6 @@ module containerApps 'core/host/container-apps.bicep' = {
     tags: tags
     containerAppsEnvironmentName: '${prefix}-containerapps-env'
     containerRegistryName: useContainerRegistry ? containerRegistry.outputs.name : ''
-    logAnalyticsWorkspaceName: useApplicationInsights ? logAnalytics.outputs.name : ''
   }
 }
 
@@ -172,7 +144,6 @@ module api 'app/api.bicep' = {
     openAiApiVersion: openAiApiVersion
     aiSearchEndpoint: useSearch ? 'https://${searchService.outputs.name}.search.windows.net' : ''
     aiSearchIndexName: aiSearchIndexName
-    appinsights_Connectionstring: useApplicationInsights ? applicationInsights.outputs.connectionString : ''
     aifoundryProjName: aiFoundry.outputs.projectName
   }
 }
@@ -188,7 +159,6 @@ module web 'app/web.bicep' = {
     identityId: managedIdentity.outputs.managedIdentityClientId
     containerAppsEnvironmentName: containerApps.outputs.environmentName
     containerRegistryName: containerApps.outputs.registryName
-    appinsights_Connectionstring: useApplicationInsights ? applicationInsights.outputs.connectionString : ''
     aifoundryProjName: aiFoundry.outputs.projectName
     apiUrl: api.outputs.SERVICE_API_URI
   }
@@ -201,16 +171,6 @@ module aiSearchRole 'core/security/role.bicep' = if (useSearch) {
   params: {
     principalId: managedIdentity.outputs.managedIdentityPrincipalId
     roleDefinitionId: '8ebe5a00-799e-43f5-93ac-243d3dce84a7' // Search Index Data Contributor
-    principalType: 'ServicePrincipal'
-  }
-}
-
-module appinsightsAccountRole 'core/security/role.bicep' = if (useApplicationInsights) {
-  scope: resourceGroup
-  name: 'appinsights-account-role'
-  params: {
-    principalId: managedIdentity.outputs.managedIdentityPrincipalId
-    roleDefinitionId: '3913510d-42f4-4e42-8a64-420c390055eb' // Monitoring Metrics Publisher
     principalType: 'ServicePrincipal'
   }
 }
@@ -269,8 +229,6 @@ output SERVICE_WEB_IMAGE_NAME string = web.outputs.SERVICE_WEB_IMAGE_NAME
 output AZURE_CONTAINER_ENVIRONMENT_NAME string = containerApps.outputs.environmentName
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerApps.outputs.registryLoginServer
 output AZURE_CONTAINER_REGISTRY_NAME string = containerApps.outputs.registryName
-
-output APPINSIGHTS_CONNECTIONSTRING string = useApplicationInsights ? applicationInsights.outputs.connectionString : ''
 
 output OPENAI_TYPE string = 'azure'
 output AZURE_EMBEDDING_NAME string = openAiEmbeddingDeploymentName

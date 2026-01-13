@@ -7,7 +7,6 @@ param identityId string
 param containerAppsEnvironmentName string
 param containerRegistryName string
 param serviceName string = 'web'
-param appinsights_Connectionstring string
 param aifoundryProjName string
 param apiUrl string
 
@@ -20,10 +19,6 @@ var env = [
   {
     name: 'API_URL'
     value: apiUrl
-  }
-  {
-    name: 'APPINSIGHTS_CONNECTIONSTRING'
-    value: appinsights_Connectionstring
   }
   {
     name: 'AZURE_LOCATION'
