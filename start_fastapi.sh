@@ -2,4 +2,10 @@
 
 # Start FastAPI backend
 echo "Starting FastAPI backend..."
-python src/api/main.py
+
+# Activate venv if it exists
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+fi
+
+python3 src/api/main.py

@@ -43,7 +43,7 @@ ai_search_tool = AzureAISearchAgentTool(
 agent = project_client.agents.create_version(
     agent_name="product-assistant",
     definition=PromptAgentDefinition(
-        model="gpt-4o",
+        model=os.environ.get("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4.1-mini"),
         instructions="""
             system:
             You are an assistant that provides information based on a knowledge base. You have access to an AI search tool that you must use for factual information.

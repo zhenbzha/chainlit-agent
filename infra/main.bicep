@@ -48,7 +48,7 @@ param aiSearchIndexName string
 
 // this needs to align with the model defined in ai.yaml
 @description('The name of the OpenAI deployment')
-param openAiDeploymentName string = 'gpt-4o'
+param openAiDeploymentName string = 'gpt-4.1-mini'
 
 @description('Id of the user or app to assign application roles')
 param principalId string = ''
@@ -195,13 +195,13 @@ module web 'app/web.bicep' = {
 }
 
 // RBAC Role Assignments
-module aiSearchRole 'core/security/role.bicep' = if (useSearch) {
+// AI Project identity needs access to Azure Search for agent tool use
+module aiSearchRoleAssignments 'core/search/search-role-assignments.bicep' = if (useSearch) {
   scope: resourceGroup
-  name: 'ai-search-index-data-contributor'
+  name: 'ai-search-role-assignments'
   params: {
-    principalId: managedIdentity.outputs.managedIdentityPrincipalId
-    roleDefinitionId: '8ebe5a00-799e-43f5-93ac-243d3dce84a7' // Search Index Data Contributor
-    principalType: 'ServicePrincipal'
+    aiSearchName: searchService.outputs.name
+    projectPrincipalId: aiFoundry.outputs.projectPrincipalId
   }
 }
 

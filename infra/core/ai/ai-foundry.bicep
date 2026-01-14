@@ -90,6 +90,7 @@ resource searchConnection 'Microsoft.CognitiveServices/accounts/connections@2025
     authType: 'AAD'
     target: 'https://${searchServiceName}.search.windows.net'
     isSharedToAll: true
+    useWorkspaceManagedIdentity: true
     metadata: {}
   }
 }
@@ -132,7 +133,6 @@ resource cognitiveServicesUserRole 'Microsoft.Authorization/roleAssignments@2022
 output id string = aiFoundry.id
 output name string = aiFoundry.name
 output endpoint string = aiFoundry.properties.endpoint
-output principalId string = aiFoundry.identity.principalId
 
 output projectId string = aiProject.id
 output projectName string = aiProject.name
